@@ -1,0 +1,58 @@
+name: Aurea smoke test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile Python
+        run: python -m py_compile server.py aurea/*.py
+      - name: Start Aurea
+        env:
+          AUREA_HOST: 127.0.0.1
+          AUREA_PORT: '8765'
+          AUREA_DB_PATH: /tmp/aurea-ci.db
+          AUREA_SECRET: ci-secret-only
+        run: |
+          python server.py > /tmp/aurea.log 2>&1 &
+          echo $! > /tmp/aurea.pid
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/aurea.log
+          exit 1
+      - name: Test public demo flow
+        run: |
+          curl -fsS -c /tmp/cookies.txt -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8765/demo/start > /tmp/demo.json
+          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8765/api/me > /tmp/me.json
+          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8765/api/snapshot > /tmp/snapshot.json
+          python - <<'PY'
+          import json
+          demo=json.load(open('/tmp/demo.json'))
+          me=json.load(open('/tmp/me.json'))
+          s=json.load(open('/tmp/snapshot.json'))
+          assert demo['ok'] is True
+          assert me['authenticated'] is True
+          assert me['user']['is_demo'] == 1
+          m=s['metrics']
+          assert m['total_income'] == 2000.0, m
+          assert m['committed'] == 1850.0, m
+          assert m['suggested_save'] == 30.0, m
+          assert m['safe_to_spend'] == 120.0, m
+          print('Aurea demo OK:', m)
+          PY
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/aurea.log || true
