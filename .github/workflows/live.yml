@@ -1,0 +1,96 @@
+name: Aurea live deploy verification
+
+on:
+  push:
+    paths:
+      - '.github/workflows/live.yml'
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for Render and verify health
+        run: |
+          set -e
+          URL='https://aurea-finance.onrender.com'
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 20 "$URL/healthz" > /tmp/health.json; then
+              break
+            fi
+            echo "Render ainda acordando... tentativa $i/20"
+            sleep 15
+          done
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/health.json'))
+          assert d.get('ok') is True, d
+          assert d.get('service') == 'aurea', d
+          print('healthz OK:', d)
+          PY
+
+      - name: Verify public landing and noindex
+        run: |
+          set -e
+          URL='https://aurea-finance.onrender.com'
+          curl -fsS -D /tmp/headers.txt -o /tmp/home.html "$URL/"
+          grep -q 'Aurea Finance' /tmp/home.html
+          grep -qi '^x-robots-tag:.*noindex' /tmp/headers.txt
+          curl -fsS "$URL/robots.txt" | grep -q 'Disallow: /'
+          echo 'Landing, noindex e robots.txt OK'
+
+      - name: Verify live demo, calculations and assistant
+        run: |
+          set -e
+          URL='https://aurea-finance.onrender.com'
+          JAR=/tmp/cookies.txt
+          curl -fsS -c "$JAR" -b "$JAR" -H 'Content-Type: application/json' -d '{}' "$URL/demo/start" > /tmp/demo.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/demo.json'))
+          assert d.get('ok') is True, d
+          assert d.get('redirect') == '/app', d
+          print('demo start OK')
+          PY
+
+          curl -fsS -c "$JAR" -b "$JAR" "$URL/api/me" > /tmp/me.json
+          python - <<'PY' > /tmp/csrf.txt
+          import json
+          d=json.load(open('/tmp/me.json'))
+          assert d.get('authenticated') is True, d
+          assert d['user'].get('is_demo') in (1, True), d
+          print(d['csrf'])
+          PY
+          CSRF=$(tail -n1 /tmp/csrf.txt)
+
+          curl -fsS -c "$JAR" -b "$JAR" "$URL/api/snapshot" > /tmp/snapshot.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/snapshot.json'))
+          m=d['metrics']
+          assert m['total_income'] == 2000.0, m
+          assert m['committed'] == 1850.0, m
+          assert m['suggested_save'] == 30.0, m
+          assert m['safe_to_spend'] == 120.0, m
+          assert len(d['bills']) == 3, d['bills']
+          assert len(d['goals']) >= 1, d['goals']
+          print('snapshot OK:', m)
+          PY
+
+          curl -fsS -c "$JAR" -b "$JAR" \
+            -H 'Content-Type: application/json' \
+            -H "X-CSRF-Token: $CSRF" \
+            -d '{"message":"Posso gastar R$ 100 hoje?"}' \
+            "$URL/api/assistant" > /tmp/assistant.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/assistant.json'))
+          assert d.get('ok') is True, d
+          assert d.get('mode') == 'local', d
+          ans=d.get('answer','')
+          assert len(ans) > 20, d
+          print('assistant OK:', ans)
+          PY
+
+          echo 'AUREA LIVE END-TO-END OK'
