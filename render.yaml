@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: aurea-finance
+    runtime: docker
+    plan: free
+    region: virginia
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aurea-finance-db
+          property: connectionString
+      - key: AUREA_SECRET
+        generateValue: true
+      - key: AUREA_HOST
+        value: 0.0.0.0
+      - key: AUREA_ENV
+        value: production
+      - key: AUREA_SECURE_COOKIE
+        value: "1"
+      - key: AUREA_NO_BROWSER
+        value: "1"
+      - key: OPENAI_MODEL
+        value: gpt-5.6-luna
+
+databases:
+  - name: aurea-finance-db
+    plan: free
+    region: virginia
+    databaseName: aurea
+    user: aurea
+    ipAllowList: []
