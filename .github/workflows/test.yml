@@ -1,12 +1,13 @@
-name: Aurea smoke test
+name: Aurea SQLite and auth tests
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
-  smoke:
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -16,42 +17,64 @@ jobs:
           python-version: '3.13'
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Compile Python
-        run: python -m py_compile server.py aurea/*.py
-      - name: Start Aurea
+      - name: Unit tests and compile
+        run: |
+          python -m unittest discover -s tests -v
+          python -m py_compile server.py aurea/*.py
+      - name: Start Aurea in test mode
         env:
+          AUREA_ENV: test
+          AUREA_TEST_OTP: '123456'
           AUREA_HOST: 127.0.0.1
           AUREA_PORT: '8765'
           AUREA_DB_PATH: /tmp/aurea-ci.db
           AUREA_SECRET: ci-secret-only
         run: |
           python server.py > /tmp/aurea.log 2>&1 &
-          echo $! > /tmp/aurea.pid
-          for i in {1..20}; do
+          for i in {1..25}; do
             if curl -fsS http://127.0.0.1:8765/healthz >/dev/null; then exit 0; fi
             sleep 1
           done
           cat /tmp/aurea.log
           exit 1
-      - name: Test public demo flow
+      - name: Test registration, OTP, onboarding and export
         run: |
-          curl -fsS -c /tmp/cookies.txt -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8765/demo/start > /tmp/demo.json
-          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8765/api/me > /tmp/me.json
-          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8765/api/snapshot > /tmp/snapshot.json
+          base=http://127.0.0.1:8765
+          curl -fsS -c /tmp/cookies.txt -H 'Content-Type: application/json' \
+            -d '{"full_name":"CI User","email":"ci@example.com","password":"SenhaForte123"}' \
+            "$base/api/auth/register" >/tmp/register.json
+          curl -fsS -b /tmp/cookies.txt -c /tmp/cookies.txt -H 'Content-Type: application/json' \
+            -d '{"purpose":"verify","code":"123456"}' "$base/api/auth/verify" >/tmp/verify.json
+          curl -fsS -b /tmp/cookies.txt "$base/api/me" >/tmp/me.json
+          csrf=$(python -c "import json;print(json.load(open('/tmp/me.json'))['csrf'])")
+          curl -fsS -b /tmp/cookies.txt -H 'Content-Type: application/json' -H "X-CSRF-Token: $csrf" \
+            -d '{"monthly_income":2500,"payday":5,"investment_pct":10,"emergency_target":5000,"cloud_ai":false}' \
+            "$base/api/profile" >/tmp/profile.json
+          curl -fsS -b /tmp/cookies.txt "$base/api/snapshot" >/tmp/snapshot.json
+          curl -fsS -b /tmp/cookies.txt "$base/api/export?format=json" >/tmp/export.json
           python - <<'PY'
           import json
-          demo=json.load(open('/tmp/demo.json'))
           me=json.load(open('/tmp/me.json'))
-          s=json.load(open('/tmp/snapshot.json'))
-          assert demo['ok'] is True
+          snap=json.load(open('/tmp/snapshot.json'))
+          exp=json.load(open('/tmp/export.json'))
           assert me['authenticated'] is True
-          assert me['user']['is_demo'] == 1
-          m=s['metrics']
+          assert snap['metrics']['total_income'] == 2500.0
+          assert exp['user']['email'] == 'ci@example.com'
+          print('auth + onboarding + export OK')
+          PY
+      - name: Test public demo flow
+        run: |
+          base=http://127.0.0.1:8765
+          curl -fsS -c /tmp/demo-cookies.txt -H 'Content-Type: application/json' -d '{}' "$base/demo/start" >/tmp/demo.json
+          curl -fsS -b /tmp/demo-cookies.txt "$base/api/snapshot" >/tmp/demo-snapshot.json
+          python - <<'PY'
+          import json
+          m=json.load(open('/tmp/demo-snapshot.json'))['metrics']
           assert m['total_income'] == 2000.0, m
           assert m['committed'] == 1850.0, m
           assert m['suggested_save'] == 30.0, m
           assert m['safe_to_spend'] == 120.0, m
-          print('Aurea demo OK:', m)
+          print('demo OK:',m)
           PY
       - name: Show server log on failure
         if: failure()

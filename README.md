@@ -1,7 +1,7 @@
 <h1 align="center">Aurea Finance</h1>
 
 <p align="center">
-  Aplicação web de planejamento financeiro pessoal com motor de orçamento determinístico, assistente contextual e modo de demonstração.
+  Planejamento financeiro pessoal com autenticação em duas etapas, motor de orçamento determinístico, histórico, PWA e assistente contextual.
 </p>
 
 <p align="center">
@@ -13,32 +13,64 @@
   <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white" alt="GitHub Actions" />
 </p>
 
-## Sobre o projeto
+## O problema
 
-A **Aurea Finance** nasceu de uma pergunta simples: depois de considerar renda, contas, gastos e prioridades, **quanto ainda é seguro gastar sem bagunçar o mês?**
+A maioria dos controles financeiros responde **quanto você gastou**. A Aurea tenta responder uma pergunta mais imediata:
 
-O projeto reúne dados financeiros em um único contexto e gera métricas objetivas para ajudar o usuário a visualizar comprometimento da renda, margem disponível, reserva sugerida e limites de orçamento.
+> **Quanto eu posso gastar agora sem comprometer contas e prioridades do mês?**
 
-Esta versão pública funciona como **MVP de portfólio** e possui um modo de demonstração que cria dados isolados para cada visitante.
+Ela combina renda, compromissos recorrentes, transações, metas e limites por categoria para calcular margem, reserva sugerida e um teto seguro de gasto.
 
-## Funcionalidades atuais
+## Funcionalidades
 
-- painel mensal com renda, contas e gastos variáveis;
-- cálculo de valor comprometido e saldo restante;
-- sugestão de reserva baseada na situação do orçamento;
-- cálculo de **teto seguro para gastar** e estimativa diária;
-- indicador de **Saúde do Orçamento** de 0 a 100;
-- acompanhamento de contas pagas e pendentes;
-- limites por categoria e detecção de orçamento excedido;
-- acompanhamento e contribuição para metas financeiras;
-- assistente contextual local baseado nos números calculados pelo sistema;
-- modo de demonstração público com usuários temporários e dados isolados;
-- persistência em SQLite local ou PostgreSQL em produção.
+### Conta e segurança
+
+- cadastro com confirmação de e-mail por OTP de 6 dígitos;
+- login em duas etapas: senha + OTP;
+- recuperação de senha por OTP;
+- senhas com PBKDF2-HMAC-SHA256;
+- OTP armazenado como HMAC, com expiração e limite de tentativas;
+- sessão server-side, rotação após autenticação, CSRF e headers de segurança;
+- rate limiting básico para fluxos sensíveis;
+- exportação dos dados e exclusão da conta.
+
+### Planejamento financeiro
+
+- renda mensal, dia de pagamento e percentual desejado para reserva;
+- contas fixas, cartão, assinaturas e dívidas;
+- status pago/pendente preservado por mês;
+- transações de entrada e saída;
+- renda extra;
+- limites por categoria;
+- metas financeiras, contribuições e ritmo estimado até o prazo;
+- indicador interno de Saúde do Orçamento;
+- reserva sugerida adaptativa;
+- teto seguro mensal e diário;
+- histórico resumido de seis meses;
+- exportação CSV e JSON.
+
+### Assistente
+
+- assistente local baseada nos números do painel, sem API paga;
+- integração opcional com OpenAI Responses API;
+- fallback automático para o modo local se a API externa falhar;
+- IA nunca é a fonte de verdade dos cálculos financeiros.
+
+### Experiência e infraestrutura
+
+- interface responsiva;
+- tema claro/escuro;
+- PWA instalável;
+- SQLite em desenvolvimento;
+- PostgreSQL quando `DATABASE_URL` está configurada;
+- Docker;
+- Render Blueprint;
+- GitHub Actions com testes SQLite, autenticação, exportação e PostgreSQL.
 
 ## Arquitetura
 
 ```text
-Browser
+Browser / PWA
   │
   ├── HTML / CSS / JavaScript
   │
@@ -47,73 +79,23 @@ server.py
   │
   ├── aurea/finance.py   → regras e cálculos financeiros
   ├── aurea/db.py        → SQLite / PostgreSQL
-  ├── aurea/security.py  → CSRF, hashing e utilitários de segurança
-  └── aurea/ai.py        → assistente contextual
+  ├── aurea/security.py  → senha, OTP, CSRF e identificador seguro
+  ├── aurea/emailer.py   → Resend / SMTP / console local
+  └── aurea/ai.py        → assistente local + OpenAI opcional
 ```
 
-A lógica financeira fica separada da interface e do acesso ao banco. Os cálculos do orçamento são determinísticos: a assistente recebe os resultados já calculados e os interpreta, em vez de inventar valores financeiros.
-
-## Stack
-
-**Backend**
-
-- Python 3.13;
-- `http.server` da biblioteca padrão;
-- SQLite para desenvolvimento;
-- PostgreSQL via `psycopg` quando `DATABASE_URL` está definida.
-
-**Frontend**
-
-- HTML5;
-- CSS3;
-- JavaScript sem framework.
-
-**Infraestrutura**
-
-- Docker;
-- Render Blueprint (`render.yaml`);
-- GitHub Actions.
-
-## Segurança
-
-A aplicação inclui algumas medidas importantes para um MVP web:
-
-- sessões armazenadas no servidor;
-- cookie de sessão `HttpOnly` e `SameSite=Lax`;
-- suporte a cookie `Secure` em produção;
-- tokens CSRF para operações autenticadas de escrita;
-- headers como `X-Content-Type-Options`, `X-Frame-Options` e `Referrer-Policy`;
-- hashing de senha com PBKDF2-HMAC-SHA256 no módulo de segurança.
-
-> A Aurea é um projeto educacional/de portfólio. Ela não deve ser tratada como software bancário auditado nem como substituto de aconselhamento financeiro profissional.
-
-## Assistente
-
-O endpoint utilizado pela versão pública atual trabalha com um **assistente local**, que responde usando exclusivamente o snapshot financeiro calculado pelo sistema.
-
-O código também contém um módulo preparado para integração opcional com a **OpenAI Responses API**, mas essa integração não é necessária para executar o modo de demonstração atual.
-
-## Banco de dados
-
-A mesma camada de acesso suporta dois ambientes:
-
-```text
-Desenvolvimento → SQLite
-Produção        → PostgreSQL via DATABASE_URL
-```
-
-O schema inclui usuários, sessões, perfis financeiros, contas, transações, metas, limites por categoria e status mensal de pagamentos.
+Mais detalhes em [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Executar localmente
 
-### 1. Clone o projeto
+### 1. Clone
 
 ```bash
 git clone https://github.com/Juan01304/aurea-finance.git
 cd aurea-finance
 ```
 
-### 2. Crie um ambiente virtual
+### 2. Ambiente virtual
 
 ```bash
 python -m venv .venv
@@ -131,71 +113,104 @@ Linux/macOS:
 source .venv/bin/activate
 ```
 
-### 3. Instale as dependências
+### 3. Dependências
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Inicie a aplicação
+O modo SQLite usa apenas a biblioteca padrão do Python. `psycopg` é usado quando há PostgreSQL.
+
+### 4. Configuração
+
+Copie `.env.example` como referência. O projeto lê variáveis de ambiente do processo.
+
+Para o mínimo local, basta:
+
+```text
+AUREA_SECRET=um-segredo-local
+AUREA_HOST=127.0.0.1
+AUREA_PORT=10000
+```
+
+### 5. Execute
 
 ```bash
 python server.py
 ```
 
-Abra:
+Abra `http://127.0.0.1:10000`.
+
+Sem Resend/SMTP, códigos OTP aparecem no terminal. Isso é proposital para desenvolvimento local.
+
+## E-mail real
+
+A opção recomendada para deploy é **Resend**:
 
 ```text
-http://127.0.0.1:10000
+RESEND_API_KEY=re_...
+RESEND_FROM=Aurea Finance <acesso@seudominio.com>
 ```
+
+Também há suporte a SMTP com `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` e `SMTP_FROM`.
+
+## OpenAI opcional
+
+```text
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.6-luna
+```
+
+Sem chave, a Aurea continua funcionando com a assistente local. A chave fica somente no backend.
 
 ## Docker
 
 ```bash
 docker build -t aurea-finance .
-docker run --rm -p 10000:10000 aurea-finance
+docker run --rm -p 10000:10000 -e AUREA_SECRET=local-secret aurea-finance
 ```
 
-Depois acesse `http://localhost:10000`.
+## Testes
 
-## CI
+```bash
+python -m unittest discover -s tests -v
+python -m py_compile server.py aurea/*.py
+```
 
-O repositório possui workflows no GitHub Actions que validam o projeto automaticamente.
+O CI também sobe o servidor, testa cadastro + OTP + onboarding + exportação, valida a demonstração e executa o caminho com PostgreSQL 16.
 
-Entre os testes atuais estão:
-
-- compilação dos módulos Python;
-- inicialização real do servidor;
-- health check em `/healthz`;
-- criação de uma sessão de demonstração;
-- validação das métricas financeiras esperadas;
-- execução do mesmo fluxo usando PostgreSQL 16.
-
-Isso ajuda a verificar não apenas funções isoladas, mas o caminho completo entre servidor, banco e API.
-
-## Estrutura principal
+## Estrutura
 
 ```text
 .
-├── .github/workflows/      # CI e smoke tests
+├── .github/workflows/      # CI SQLite/auth e PostgreSQL
 ├── aurea/
 │   ├── ai.py               # assistente contextual
-│   ├── db.py               # banco e schema
+│   ├── db.py               # conexão, schema e migrações simples
+│   ├── emailer.py          # Resend / SMTP
 │   ├── finance.py          # motor financeiro
-│   └── security.py         # utilitários de segurança
+│   └── security.py         # senha, OTP e CSRF
 ├── public/
 │   ├── index.html          # landing page
-│   ├── app.html            # dashboard
-│   ├── app.js              # interação do frontend
-│   └── style.css           # interface
+│   ├── auth.html           # cadastro/login/OTP/reset
+│   ├── onboarding.html     # configuração inicial
+│   ├── app.html            # painel
+│   ├── app.js              # interação do painel
+│   ├── style.css           # interface e temas
+│   ├── manifest.webmanifest
+│   └── sw.js               # service worker
+├── tests/
+├── ARCHITECTURE.md
+├── SECURITY.md
+├── ROADMAP.md
+├── PORTFOLIO.md
 ├── Dockerfile
 ├── render.yaml
-├── requirements.txt
-└── server.py               # servidor HTTP e API
+└── server.py
 ```
 
 ## Status
 
-**MVP em evolução.**
+**Escopo de portfólio concluído.** Veja [`ROADMAP.md`](ROADMAP.md) para a diferença entre o MVP atual e o que seria necessário para operar com usuários e dados importantes em escala real.
 
-O foco atual é continuar melhorando arquitetura, experiência de uso, cobertura de testes e segurança enquanto o projeto evolui de exercício prático para uma aplicação de portfólio cada vez mais sólida.
+> Aurea é um projeto educacional/de portfólio. Não é banco, software financeiro auditado nem substituto de aconselhamento financeiro profissional.

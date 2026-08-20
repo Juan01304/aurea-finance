@@ -1,8 +1,9 @@
-name: Aurea PostgreSQL deploy test
+name: Aurea PostgreSQL tests
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -25,6 +26,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://aurea:aurea_test@127.0.0.1:5432/aurea
+      AUREA_ENV: test
+      AUREA_TEST_OTP: '123456'
       AUREA_HOST: 127.0.0.1
       AUREA_PORT: '8766'
       AUREA_SECRET: ci-postgres-secret
@@ -45,8 +48,9 @@ jobs:
           exit 1
       - name: Verify demo calculations on PostgreSQL
         run: |
-          curl -fsS -c /tmp/cookies.txt -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8766/demo/start >/tmp/demo.json
-          curl -fsS -b /tmp/cookies.txt http://127.0.0.1:8766/api/snapshot >/tmp/snapshot.json
+          base=http://127.0.0.1:8766
+          curl -fsS -c /tmp/cookies.txt -H 'Content-Type: application/json' -d '{}' "$base/demo/start" >/tmp/demo.json
+          curl -fsS -b /tmp/cookies.txt "$base/api/snapshot" >/tmp/snapshot.json
           python - <<'PY'
           import json
           m=json.load(open('/tmp/snapshot.json'))['metrics']
@@ -54,7 +58,7 @@ jobs:
           assert m['committed'] == 1850.0, m
           assert m['suggested_save'] == 30.0, m
           assert m['safe_to_spend'] == 120.0, m
-          print('PostgreSQL deploy path OK:', m)
+          print('PostgreSQL path OK:',m)
           PY
       - if: failure()
         run: cat /tmp/aurea-pg.log || true

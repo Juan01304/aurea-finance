@@ -1,0 +1,9 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Configurar • Aurea Finance</title><link rel="stylesheet" href="/static/style.css"></head>
+<body class="auth-body"><main class="auth-shell wide"><a class="brand auth-brand" href="/"><span>A</span>Aurea Finance</a><section class="auth-card"><p class="eyebrow">PRIMEIRA CONFIGURAÇÃO</p><h1>Monte a base do seu mês</h1><p class="muted">Esses valores alimentam o motor financeiro. Você poderá alterá-los depois.</p>
+<form id="onboardingForm" class="form-grid">
+<div class="field"><label>Renda mensal</label><input name="monthly_income" type="number" min="0" step="0.01" required></div>
+<div class="field"><label>Dia de pagamento</label><input name="payday" type="number" min="1" max="31" value="5" required></div>
+<div class="field"><label>% desejado para reserva</label><input name="investment_pct" type="number" min="0" max="100" step="0.5" value="10" required></div>
+<div class="field"><label>Meta de reserva de emergência</label><input name="emergency_target" type="number" min="0" step="0.01" value="0"></div>
+<label class="check full"><input name="cloud_ai" type="checkbox" checked> Usar IA em nuvem quando estiver configurada, com fallback local.</label>
+<button class="primary full">Entrar no painel</button></form><div id="onboardingMessage" class="form-message"></div></section></main><script src="/static/onboarding.js"></script></body></html>

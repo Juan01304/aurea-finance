@@ -18,10 +18,14 @@ services:
         value: production
       - key: AUREA_SECURE_COOKIE
         value: "1"
-      - key: AUREA_NO_BROWSER
-        value: "1"
       - key: OPENAI_MODEL
         value: gpt-5.6-luna
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
 
 databases:
   - name: aurea-finance-db
